@@ -37,7 +37,7 @@ func TestCheckMonitor_OpensIncidentAfterConsecutiveFailures(t *testing.T) {
 	samples := memory.NewSampleRepository()
 	publisher := &spyPublisher{}
 
-	m := monitor.New("mon-1", "https://example.com", monitor.TypeUptime, 3, time.Minute, 5*time.Second)
+	m := monitor.New("mon-1", "Test Monitor", "", "https://example.com", monitor.TypeUptime, 3, time.Minute, 5*time.Second)
 	if err := monitors.Save(ctx, m); err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestCheckMonitor_DoesNotOpenSecondIncidentWhileOneIsOpen(t *testing.T) {
 	samples := memory.NewSampleRepository()
 	publisher := &spyPublisher{}
 
-	m := monitor.New("mon-1", "https://example.com", monitor.TypeUptime, 2, time.Minute, 5*time.Second)
+	m := monitor.New("mon-1", "Test Monitor", "", "https://example.com", monitor.TypeUptime, 2, time.Minute, 5*time.Second)
 	if err := monitors.Save(ctx, m); err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestCheckMonitor_ResolvesIncidentAfterConsecutiveSuccesses(t *testing.T) {
 	samples := memory.NewSampleRepository()
 	publisher := &spyPublisher{}
 
-	m := monitor.New("mon-1", "https://example.com", monitor.TypeUptime, 2, time.Minute, 5*time.Second)
+	m := monitor.New("mon-1", "Test Monitor", "", "https://example.com", monitor.TypeUptime, 2, time.Minute, 5*time.Second)
 	if err := monitors.Save(ctx, m); err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -151,7 +151,7 @@ func TestCheckMonitor_SkipsInactiveMonitor(t *testing.T) {
 	samples := memory.NewSampleRepository()
 	publisher := &spyPublisher{}
 
-	m := monitor.New("mon-1", "https://example.com", monitor.TypeUptime, 3, time.Minute, 5*time.Second)
+	m := monitor.New("mon-1", "Test Monitor", "", "https://example.com", monitor.TypeUptime, 3, time.Minute, 5*time.Second)
 	m.Pause()
 	if err := monitors.Save(ctx, m); err != nil {
 		t.Fatalf("setup: %v", err)

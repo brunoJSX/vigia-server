@@ -53,3 +53,19 @@ func (r *SampleRepository) FindByMonitorAndPeriod(ctx context.Context, monitorID
 	}
 	return out, nil
 }
+
+func (r *SampleRepository) FindLastTimestamps(ctx context.Context, monitorIDs []string) (map[string]time.Time, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	out := make(map[string]time.Time, len(monitorIDs))
+	for _, id := range monitorIDs {
+		samples := r.samples[id]
+		if len(samples) == 0 {
+			continue
+		}
+		last := samples[len(samples)-1].Timestamp
+		out[id] = last
+	}
+	return out, nil
+}

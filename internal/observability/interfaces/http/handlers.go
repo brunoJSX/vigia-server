@@ -10,19 +10,24 @@ package http
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/vigia/vigia-v1/internal/observability/application"
+	"github.com/vigia/vigia-v1/internal/observability/incident"
 	"github.com/vigia/vigia-v1/internal/observability/monitor"
 )
 
 type Handlers struct {
-	createMonitor  *application.CreateMonitor
-	pauseMonitor   *application.PauseMonitor
-	resumeMonitor  *application.ResumeMonitor
-	disableMonitor *application.DisableMonitor
-	queryHistory   *application.QueryHistory
+	createMonitor         *application.CreateMonitor
+	pauseMonitor          *application.PauseMonitor
+	resumeMonitor         *application.ResumeMonitor
+	disableMonitor        *application.DisableMonitor
+	queryHistory          *application.QueryHistory
+	queryMonitors         *application.QueryMonitors
+	queryIncidents        *application.QueryIncidents
+	queryAggregateHistory *application.QueryAggregateHistory
 }
 
 func NewHandlers(
@@ -31,17 +36,25 @@ func NewHandlers(
 	resumeMonitor *application.ResumeMonitor,
 	disableMonitor *application.DisableMonitor,
 	queryHistory *application.QueryHistory,
+	queryMonitors *application.QueryMonitors,
+	queryIncidents *application.QueryIncidents,
+	queryAggregateHistory *application.QueryAggregateHistory,
 ) *Handlers {
 	return &Handlers{
-		createMonitor:  createMonitor,
-		pauseMonitor:   pauseMonitor,
-		resumeMonitor:  resumeMonitor,
-		disableMonitor: disableMonitor,
-		queryHistory:   queryHistory,
+		createMonitor:         createMonitor,
+		pauseMonitor:          pauseMonitor,
+		resumeMonitor:         resumeMonitor,
+		disableMonitor:        disableMonitor,
+		queryHistory:          queryHistory,
+		queryMonitors:         queryMonitors,
+		queryIncidents:        queryIncidents,
+		queryAggregateHistory: queryAggregateHistory,
 	}
 }
 
 type createMonitorRequest struct {
+	Name                          string  `json:"name"`
+	Description                   string  `json:"description"`
 	Target                        string  `json:"target"`
 	Type                          string  `json:"type"`
 	Threshold                     int     `json:"threshold"`
@@ -51,6 +64,8 @@ type createMonitorRequest struct {
 
 type monitorResponse struct {
 	ID                            string  `json:"id"`
+	Name                          string  `json:"name"`
+	Description                   string  `json:"description"`
 	Target                        string  `json:"target"`
 	Type                          string  `json:"type"`
 	Status                        string  `json:"status"`
@@ -59,9 +74,17 @@ type monitorResponse struct {
 	AcceptableResponseTimeSeconds float64 `json:"acceptable_response_time_seconds,omitempty"`
 }
 
+type monitorViewResponse struct {
+	monitorResponse
+	CurrentState  string  `json:"current_state"`
+	LastCheckedAt *string `json:"last_checked_at"`
+}
+
 func newMonitorResponse(m monitor.Monitor) monitorResponse {
 	return monitorResponse{
 		ID:                            m.ID,
+		Name:                          m.Name,
+		Description:                   m.Description,
 		Target:                        m.Target,
 		Type:                          string(m.Type),
 		Status:                        string(m.Status),
@@ -71,6 +94,18 @@ func newMonitorResponse(m monitor.Monitor) monitorResponse {
 	}
 }
 
+func newMonitorViewResponse(v application.MonitorView) monitorViewResponse {
+	r := monitorViewResponse{
+		monitorResponse: newMonitorResponse(v.Monitor),
+		CurrentState:    string(v.CurrentState),
+	}
+	if v.LastCheckedAt != nil {
+		s := v.LastCheckedAt.UTC().Format(time.RFC3339)
+		r.LastCheckedAt = &s
+	}
+	return r
+}
+
 func (h *Handlers) CreateMonitor(w http.ResponseWriter, r *http.Request) {
 	var req createMonitorRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -78,12 +113,18 @@ func (h *Handlers) CreateMonitor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.Name == "" {
+		http.Error(w, "name is required", http.StatusBadRequest)
+		return
+	}
 	if monitor.Type(req.Type) == monitor.TypeCheckout && req.AcceptableResponseTimeSeconds <= 0 {
 		http.Error(w, "acceptable_response_time_seconds is required for checkout monitors", http.StatusBadRequest)
 		return
 	}
 
 	m, err := h.createMonitor.Execute(r.Context(), application.CreateMonitorInput{
+		Name:                   req.Name,
+		Description:            req.Description,
 		Target:                 req.Target,
 		Type:                   monitor.Type(req.Type),
 		Threshold:              req.Threshold,
@@ -96,6 +137,72 @@ func (h *Handlers) CreateMonitor(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, newMonitorResponse(m))
+}
+
+func (h *Handlers) ListMonitors(w http.ResponseWriter, r *http.Request) {
+	views, err := h.queryMonitors.Execute(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	resp := make([]monitorViewResponse, 0, len(views))
+	for _, v := range views {
+		resp = append(resp, newMonitorViewResponse(v))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"monitors": resp})
+}
+
+func (h *Handlers) ListIncidents(w http.ResponseWriter, r *http.Request) {
+	statusParam := r.URL.Query().Get("status")
+
+	var status incident.Status
+	switch statusParam {
+	case "open":
+		status = incident.StatusOpen
+	case "resolved":
+		status = incident.StatusResolved
+	case "":
+		status = ""
+	default:
+		http.Error(w, "status must be 'open', 'resolved', or omitted", http.StatusBadRequest)
+		return
+	}
+
+	views, err := h.queryIncidents.Execute(r.Context(), application.QueryIncidentsInput{
+		Status: status,
+		Limit:  50,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	type incidentViewResponse struct {
+		ID              string     `json:"id"`
+		DisplayID       string     `json:"display_id"`
+		MonitorID       string     `json:"monitor_id"`
+		MonitorName     string     `json:"monitor_name"`
+		Status          string     `json:"status"`
+		OpenedAt        time.Time  `json:"opened_at"`
+		ResolvedAt      *time.Time `json:"resolved_at,omitempty"`
+		DurationSeconds float64    `json:"duration_seconds"`
+	}
+
+	resp := make([]incidentViewResponse, 0, len(views))
+	for _, v := range views {
+		resp = append(resp, incidentViewResponse{
+			ID:              v.Incident.ID,
+			DisplayID:       fmt.Sprintf("INC-%d", v.Incident.SequenceNumber),
+			MonitorID:       v.Incident.MonitorID,
+			MonitorName:     v.MonitorName,
+			Status:          string(v.Incident.Status),
+			OpenedAt:        v.Incident.OpenedAt,
+			ResolvedAt:      v.Incident.ResolvedAt,
+			DurationSeconds: v.Incident.Duration().Seconds(),
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"incidents": resp})
 }
 
 func (h *Handlers) PauseMonitor(w http.ResponseWriter, r *http.Request) {
@@ -174,6 +281,37 @@ func (h *Handlers) MonitorHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, newHistoryResponse(result))
+}
+
+func (h *Handlers) AggregateHistory(w http.ResponseWriter, r *http.Request) {
+	days := 30
+	if p := r.URL.Query().Get("days"); p != "" {
+		if n, err := parseInt(p); err == nil && n > 0 && n <= 365 {
+			days = n
+		} else {
+			http.Error(w, "days must be a positive integer up to 365", http.StatusBadRequest)
+			return
+		}
+	}
+
+	result, err := h.queryAggregateHistory.Execute(r.Context(), days)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
+func parseInt(s string) (int, error) {
+	n := 0
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return 0, fmt.Errorf("not a number")
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n, nil
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

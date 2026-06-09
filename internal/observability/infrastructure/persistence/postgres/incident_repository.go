@@ -19,6 +19,8 @@ func NewIncidentRepository(pool *pgxpool.Pool) *IncidentRepository {
 	return &IncidentRepository{pool: pool}
 }
 
+const incidentColumns = `id, monitor_id, status, opened_at, resolved_at, sequence_number`
+
 func (r *IncidentRepository) Save(ctx context.Context, i incident.Incident) error {
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO incidents (id, monitor_id, status, opened_at, resolved_at)
@@ -34,7 +36,7 @@ func (r *IncidentRepository) Save(ctx context.Context, i incident.Incident) erro
 // at most one Open Incident per Monitor.
 func (r *IncidentRepository) FindOpenByMonitorID(ctx context.Context, monitorID string) (*incident.Incident, error) {
 	row := r.pool.QueryRow(ctx, `
-		SELECT id, monitor_id, status, opened_at, resolved_at
+		SELECT `+incidentColumns+`
 		FROM incidents
 		WHERE monitor_id = $1 AND status = $2
 		LIMIT 1
@@ -52,11 +54,87 @@ func (r *IncidentRepository) FindOpenByMonitorID(ctx context.Context, monitorID 
 
 func (r *IncidentRepository) FindByMonitorAndPeriod(ctx context.Context, monitorID string, from, to time.Time) ([]incident.Incident, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, monitor_id, status, opened_at, resolved_at
+		SELECT `+incidentColumns+`
 		FROM incidents
 		WHERE monitor_id = $1 AND opened_at >= $2 AND opened_at < $3
 		ORDER BY opened_at
 	`, monitorID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []incident.Incident
+	for rows.Next() {
+		i, err := scanIncident(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, i)
+	}
+	return out, rows.Err()
+}
+
+func (r *IncidentRepository) FindAllOpen(ctx context.Context) ([]incident.Incident, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT `+incidentColumns+` FROM incidents WHERE status = $1
+	`, string(incident.StatusOpen))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []incident.Incident
+	for rows.Next() {
+		i, err := scanIncident(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, i)
+	}
+	return out, rows.Err()
+}
+
+func (r *IncidentRepository) FindByStatus(ctx context.Context, status incident.Status, limit int) ([]incident.Incident, error) {
+	var rows pgx.Rows
+	var err error
+
+	if status == "" {
+		if limit > 0 {
+			rows, err = r.pool.Query(ctx, `SELECT `+incidentColumns+` FROM incidents ORDER BY opened_at DESC LIMIT $1`, limit)
+		} else {
+			rows, err = r.pool.Query(ctx, `SELECT `+incidentColumns+` FROM incidents ORDER BY opened_at DESC`)
+		}
+	} else {
+		if limit > 0 {
+			rows, err = r.pool.Query(ctx, `SELECT `+incidentColumns+` FROM incidents WHERE status = $1 ORDER BY opened_at DESC LIMIT $2`, string(status), limit)
+		} else {
+			rows, err = r.pool.Query(ctx, `SELECT `+incidentColumns+` FROM incidents WHERE status = $1 ORDER BY opened_at DESC`, string(status))
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []incident.Incident
+	for rows.Next() {
+		i, err := scanIncident(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, i)
+	}
+	return out, rows.Err()
+}
+
+func (r *IncidentRepository) FindByPeriod(ctx context.Context, from, to time.Time) ([]incident.Incident, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT `+incidentColumns+`
+		FROM incidents
+		WHERE opened_at < $2 AND (resolved_at IS NULL OR resolved_at > $1)
+		ORDER BY opened_at
+	`, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +158,7 @@ func scanIncident(row rowScanner) (incident.Incident, error) {
 		resolvedAt *time.Time
 	)
 
-	if err := row.Scan(&i.ID, &i.MonitorID, &status, &i.OpenedAt, &resolvedAt); err != nil {
+	if err := row.Scan(&i.ID, &i.MonitorID, &status, &i.OpenedAt, &resolvedAt, &i.SequenceNumber); err != nil {
 		return incident.Incident{}, err
 	}
 

@@ -12,7 +12,7 @@ import (
 )
 
 func newTestMonitor(id string) monitor.Monitor {
-	return monitor.New(id, "https://example.com", monitor.TypeUptime, 3, time.Minute, 5*time.Second)
+	return monitor.New(id, "Test Monitor", "", "https://example.com", monitor.TypeUptime, 3, time.Minute, 5*time.Second)
 }
 
 // RN-037: status transitions move a Monitor between Active, Paused and Disabled.

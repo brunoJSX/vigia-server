@@ -51,3 +51,14 @@ func (r *MonitorRepository) FindActive(ctx context.Context) ([]monitor.Monitor, 
 	}
 	return active, nil
 }
+
+func (r *MonitorRepository) FindAll(ctx context.Context) ([]monitor.Monitor, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	out := make([]monitor.Monitor, 0, len(r.monitors))
+	for _, m := range r.monitors {
+		out = append(out, m)
+	}
+	return out, nil
+}

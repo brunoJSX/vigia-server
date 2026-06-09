@@ -81,6 +81,33 @@ func (r *SampleRepository) FindByMonitorAndPeriod(ctx context.Context, monitorID
 	return out, rows.Err()
 }
 
+func (r *SampleRepository) FindLastTimestamps(ctx context.Context, monitorIDs []string) (map[string]time.Time, error) {
+	if len(monitorIDs) == 0 {
+		return map[string]time.Time{}, nil
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT DISTINCT ON (monitor_id) monitor_id, "timestamp"
+		FROM samples
+		WHERE monitor_id = ANY($1)
+		ORDER BY monitor_id, "timestamp" DESC
+	`, monitorIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make(map[string]time.Time, len(monitorIDs))
+	for rows.Next() {
+		var monitorID string
+		var ts time.Time
+		if err := rows.Scan(&monitorID, &ts); err != nil {
+			return nil, err
+		}
+		out[monitorID] = ts
+	}
+	return out, rows.Err()
+}
+
 func scanSample(row rowScanner) (collector.Sample, error) {
 	var (
 		s         collector.Sample

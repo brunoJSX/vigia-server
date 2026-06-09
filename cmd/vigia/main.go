@@ -61,12 +61,15 @@ func main() {
 	resumeMonitor := application.NewResumeMonitor(monitors)
 	disableMonitor := application.NewDisableMonitor(monitors)
 	queryHistory := application.NewQueryHistory(incidents, samples)
+	queryMonitors := application.NewQueryMonitors(monitors, incidents, samples)
+	queryIncidents := application.NewQueryIncidents(incidents, monitors)
+	queryAggregateHistory := application.NewQueryAggregateHistory(monitors, incidents, sysClock)
 
 	sched := scheduler.NewTickerScheduler(monitors, checkMonitor, 30*time.Second, sysClock, nil)
 	go sched.Run(ctx)
 	go runDailySummaryLoop(ctx, buildDailySummary)
 
-	handlers := httpapi.NewHandlers(createMonitor, pauseMonitor, resumeMonitor, disableMonitor, queryHistory)
+	handlers := httpapi.NewHandlers(createMonitor, pauseMonitor, resumeMonitor, disableMonitor, queryHistory, queryMonitors, queryIncidents, queryAggregateHistory)
 	addr := envOrDefault("HTTP_ADDR", ":8080")
 	server := &http.Server{Addr: addr, Handler: httpapi.NewRouter(handlers)}
 

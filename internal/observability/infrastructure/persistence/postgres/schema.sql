@@ -3,6 +3,8 @@
 
 CREATE TABLE IF NOT EXISTS monitors (
     id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
     target      TEXT NOT NULL,
     type        TEXT NOT NULL,
     status      TEXT NOT NULL,
@@ -14,11 +16,12 @@ CREATE TABLE IF NOT EXISTS monitors (
 );
 
 CREATE TABLE IF NOT EXISTS incidents (
-    id          TEXT PRIMARY KEY,
-    monitor_id  TEXT NOT NULL REFERENCES monitors (id),
-    status      TEXT NOT NULL,
-    opened_at   TIMESTAMPTZ NOT NULL,
-    resolved_at TIMESTAMPTZ
+    id              TEXT PRIMARY KEY,
+    monitor_id      TEXT NOT NULL REFERENCES monitors (id),
+    status          TEXT NOT NULL,
+    opened_at       TIMESTAMPTZ NOT NULL,
+    resolved_at     TIMESTAMPTZ,
+    sequence_number SERIAL
 );
 
 CREATE INDEX IF NOT EXISTS incidents_monitor_status_idx ON incidents (monitor_id, status);

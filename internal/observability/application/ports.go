@@ -18,6 +18,7 @@ type MonitorRepository interface {
 	Save(ctx context.Context, m monitor.Monitor) error
 	FindByID(ctx context.Context, id string) (monitor.Monitor, error)
 	FindActive(ctx context.Context) ([]monitor.Monitor, error)
+	FindAll(ctx context.Context) ([]monitor.Monitor, error)
 }
 
 // IncidentRepository persists and retrieves Incidents.
@@ -27,6 +28,13 @@ type IncidentRepository interface {
 	// Monitor — RN-002 guarantees there is at most one.
 	FindOpenByMonitorID(ctx context.Context, monitorID string) (*incident.Incident, error)
 	FindByMonitorAndPeriod(ctx context.Context, monitorID string, from, to time.Time) ([]incident.Incident, error)
+	FindAllOpen(ctx context.Context) ([]incident.Incident, error)
+	// FindByStatus returns incidents with the given status, ordered by
+	// opened_at desc. Pass limit=0 for no limit.
+	FindByStatus(ctx context.Context, status incident.Status, limit int) ([]incident.Incident, error)
+	// FindByPeriod returns all incidents that overlap [from, to) — i.e.
+	// opened before to and not yet resolved or resolved after from.
+	FindByPeriod(ctx context.Context, from, to time.Time) ([]incident.Incident, error)
 }
 
 // SampleRepository persists and retrieves the raw data the Collector
@@ -36,6 +44,9 @@ type SampleRepository interface {
 	// FindRecent returns up to `limit` of the most recent samples, oldest first.
 	FindRecent(ctx context.Context, monitorID string, limit int) ([]collector.Sample, error)
 	FindByMonitorAndPeriod(ctx context.Context, monitorID string, from, to time.Time) ([]collector.Sample, error)
+	// FindLastTimestamps returns the most recent sample timestamp per monitor.
+	// MonitorIDs with no samples are absent from the result map.
+	FindLastTimestamps(ctx context.Context, monitorIDs []string) (map[string]time.Time, error)
 }
 
 // EventKind names something relevant this context emits — overview.md

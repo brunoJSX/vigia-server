@@ -13,12 +13,16 @@ const (
 // Incident represents an operational situation relevant to the client —
 // unavailability, slowness, dependency failure. It carries the duration of
 // the problem it represents (RN-012).
+//
+// SequenceNumber is assigned by the persistence layer (DB serial) and used
+// to produce human-readable identifiers (e.g. INC-42). Zero until persisted.
 type Incident struct {
-	ID         string
-	MonitorID  string
-	Status     Status
-	OpenedAt   time.Time
-	ResolvedAt *time.Time
+	ID             string
+	MonitorID      string
+	Status         Status
+	OpenedAt       time.Time
+	ResolvedAt     *time.Time
+	SequenceNumber int
 }
 
 // Open creates an Incident in state Open (RN-038).

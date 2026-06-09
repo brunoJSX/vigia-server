@@ -9,12 +9,13 @@ concepts:
   Monitor:
     description: >
       Representa o que deve ser observado na operação — disponibilidade, performance de
-      checkout, dependências externas. Possui configuração própria (threshold, intervalo) e
-      status operacional. Monitor do tipo Checkout carrega adicionalmente
-      AcceptableResponseTime — o único limiar de tempo com significado de domínio para
-      Checkout: define dentro de quanto tempo o fluxo deve responder para não ser considerado
-      Lentidão. Para Uptime e Dependency, o tempo de espera do Collector é detalhe técnico
-      interno, sem representação no domínio.
+      checkout, dependências externas. Possui nome legível (Name), descrição opcional
+      (Description), configuração própria (threshold, intervalo) e status operacional.
+      Monitor do tipo Checkout carrega adicionalmente AcceptableResponseTime — o único
+      limiar de tempo com significado de domínio para Checkout: define dentro de quanto
+      tempo o fluxo deve responder para não ser considerado Lentidão. Para Uptime e
+      Dependency, o tempo de espera do Collector é detalhe técnico interno, sem
+      representação no domínio.
     responsibilities:
       - Definir o alvo e a configuração de uma verificação contínua
       - Manter status operacional (Active, Paused, Disabled)
@@ -28,7 +29,8 @@ concepts:
   Incident:
     description: >
       Representa uma situação operacional relevante para o cliente — indisponibilidade,
-      lentidão, falha de dependência.
+      lentidão, falha de dependência. Possui identificador sequencial (SequenceNumber)
+      atribuído pela persistência, utilizado para gerar identificadores legíveis (INC-N).
     responsibilities:
       - Registrar uma situação operacional detectada e seu lifecycle (Open, Resolved)
       - Carregar a duração do problema que representa
@@ -120,6 +122,26 @@ workflows:
       - Incident é encerrado e sua duração é calculada
     output:
       - incident (estado Resolved)
+
+  QueryMonitors:
+    input:
+      - nenhum (retorna todos os monitors)
+    flow:
+      - Busca todos os monitors
+      - Deriva current_state por monitor (functioning / slow / down) a partir de Incident aberto
+      - Retorna last_checked_at a partir do último Sample registrado
+    output:
+      - lista de MonitorView (monitor + current_state + last_checked_at)
+
+  QueryIncidents:
+    input:
+      - status (open | resolved | todos)
+      - limit opcional
+    flow:
+      - Busca incidents pelo status, ordenados por opened_at desc
+      - Enriquece com nome do Monitor para exibição
+    output:
+      - lista de IncidentView (incident + monitor_name + display_id INC-N)
 
   QueryHistory:
     input:

@@ -24,6 +24,8 @@ func NewMonitorRepository(pool *pgxpool.Pool) *MonitorRepository {
 	return &MonitorRepository{pool: pool}
 }
 
+const monitorColumns = `id, name, description, target, type, status, threshold, interval_ns, acceptable_response_time_ns`
+
 func (r *MonitorRepository) Save(ctx context.Context, m monitor.Monitor) error {
 	var art *int64
 	if m.AcceptableResponseTime > 0 {
@@ -31,9 +33,11 @@ func (r *MonitorRepository) Save(ctx context.Context, m monitor.Monitor) error {
 		art = &v
 	}
 	_, err := r.pool.Exec(ctx, `
-		INSERT INTO monitors (id, target, type, status, threshold, interval_ns, acceptable_response_time_ns, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, now(), now())
+		INSERT INTO monitors (id, name, description, target, type, status, threshold, interval_ns, acceptable_response_time_ns, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now(), now())
 		ON CONFLICT (id) DO UPDATE SET
+			name                        = EXCLUDED.name,
+			description                 = EXCLUDED.description,
 			target                      = EXCLUDED.target,
 			type                        = EXCLUDED.type,
 			status                      = EXCLUDED.status,
@@ -41,14 +45,13 @@ func (r *MonitorRepository) Save(ctx context.Context, m monitor.Monitor) error {
 			interval_ns                 = EXCLUDED.interval_ns,
 			acceptable_response_time_ns = EXCLUDED.acceptable_response_time_ns,
 			updated_at                  = now()
-	`, m.ID, m.Target, string(m.Type), string(m.Status), m.Threshold, int64(m.Interval), art)
+	`, m.ID, m.Name, m.Description, m.Target, string(m.Type), string(m.Status), m.Threshold, int64(m.Interval), art)
 	return err
 }
 
 func (r *MonitorRepository) FindByID(ctx context.Context, id string) (monitor.Monitor, error) {
 	row := r.pool.QueryRow(ctx, `
-		SELECT id, target, type, status, threshold, interval_ns, acceptable_response_time_ns
-		FROM monitors WHERE id = $1
+		SELECT `+monitorColumns+` FROM monitors WHERE id = $1
 	`, id)
 
 	m, err := scanMonitor(row)
@@ -60,9 +63,26 @@ func (r *MonitorRepository) FindByID(ctx context.Context, id string) (monitor.Mo
 
 func (r *MonitorRepository) FindActive(ctx context.Context) ([]monitor.Monitor, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, target, type, status, threshold, interval_ns, acceptable_response_time_ns
-		FROM monitors WHERE status = $1
+		SELECT `+monitorColumns+` FROM monitors WHERE status = $1
 	`, string(monitor.StatusActive))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []monitor.Monitor
+	for rows.Next() {
+		m, err := scanMonitor(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+func (r *MonitorRepository) FindAll(ctx context.Context) ([]monitor.Monitor, error) {
+	rows, err := r.pool.Query(ctx, `SELECT `+monitorColumns+` FROM monitors ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +112,7 @@ func scanMonitor(row rowScanner) (monitor.Monitor, error) {
 		artNS       *int64
 	)
 
-	if err := row.Scan(&m.ID, &m.Target, &monitorType, &status, &m.Threshold, &intervalNS, &artNS); err != nil {
+	if err := row.Scan(&m.ID, &m.Name, &m.Description, &m.Target, &monitorType, &status, &m.Threshold, &intervalNS, &artNS); err != nil {
 		return monitor.Monitor{}, err
 	}
 

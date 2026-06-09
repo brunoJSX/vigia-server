@@ -10,11 +10,11 @@ import (
 )
 
 func uptimeMonitor() monitor.Monitor {
-	return monitor.New("m", "https://example.com", monitor.TypeUptime, 3, time.Minute, 0)
+	return monitor.New("m", "Test Monitor", "", "https://example.com", monitor.TypeUptime, 3, time.Minute, 0)
 }
 
 func checkoutMonitor(art time.Duration) monitor.Monitor {
-	return monitor.New("m", "https://example.com/checkout", monitor.TypeCheckout, 3, time.Minute, art)
+	return monitor.New("m", "Test Checkout", "", "https://example.com/checkout", monitor.TypeCheckout, 3, time.Minute, art)
 }
 
 func sample(success bool) collector.Sample {
