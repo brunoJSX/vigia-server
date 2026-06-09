@@ -1,5 +1,3 @@
-// Bootstrap for the Observability vertical slice — manual dependency
-// injection, no framework (golang-conventions: prefer explicit code).
 package main
 
 import (
@@ -14,6 +12,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 
+	accountapp "github.com/vigia/vigia-v1/internal/account/application"
+	accountpostgres "github.com/vigia/vigia-v1/internal/account/infrastructure/persistence/postgres"
+	accounthttp "github.com/vigia/vigia-v1/internal/account/interfaces/http"
 	notifapp "github.com/vigia/vigia-v1/internal/notification/application"
 	notifobservability "github.com/vigia/vigia-v1/internal/notification/infrastructure/observability"
 	notifpostgres "github.com/vigia/vigia-v1/internal/notification/infrastructure/persistence/postgres"
@@ -26,12 +27,10 @@ import (
 	httpapi "github.com/vigia/vigia-v1/internal/observability/interfaces/http"
 	"github.com/vigia/vigia-v1/internal/shared/clock"
 	"github.com/vigia/vigia-v1/internal/shared/id"
+	"github.com/vigia/vigia-v1/internal/shared/middleware"
 )
 
 func main() {
-	// Loads .env into the process environment when present — silently a
-	// no-op otherwise, so real deployments (env vars set directly) work
-	// the same way.
 	_ = godotenv.Load()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -50,6 +49,12 @@ func main() {
 	sysClock := clock.System()
 	ids := id.Random()
 
+	// Account context
+	accountRepo := accountpostgres.NewAccountRepository(pool)
+	getAccount := accountapp.NewGetAccount(accountRepo, sysClock)
+	updateAccount := accountapp.NewUpdateAccount(accountRepo, sysClock)
+	resolveRecipient := accountapp.NewResolveRecipient(accountRepo)
+
 	// Notification context
 	notifRepo := notifpostgres.NewNotificationRepository(pool)
 	whatsappProvider := uazapi.NewWhatsAppProvider(
@@ -59,7 +64,7 @@ func main() {
 	)
 	enqueueNotification := notifapp.NewEnqueueNotification(notifRepo, ids, sysClock)
 	deliverNotifications := notifapp.NewDeliverNotifications(notifRepo, whatsappProvider, sysClock)
-	publisher := notifobservability.NewPublisher(enqueueNotification, envOrDefault("WHATSAPP_RECIPIENT", ""))
+	publisher := notifobservability.NewPublisher(enqueueNotification, resolveRecipient)
 
 	// Observability context
 	resolveIncident := application.NewResolveIncident(incidents, publisher, sysClock)
@@ -84,12 +89,27 @@ func main() {
 	go runDailySummaryLoop(ctx, buildDailySummary)
 	go runDeliveryLoop(ctx, deliverNotifications)
 
-	handlers := httpapi.NewHandlers(createMonitor, pauseMonitor, resumeMonitor, disableMonitor, queryHistory, queryMonitors, queryIncidents, queryAggregateHistory)
+	// HTTP
+	supabaseURL := envOrDefault("SUPABASE_URL", "")
+	jwksURL := supabaseURL + "/auth/v1/.well-known/jwks.json"
+	authMW, err := middleware.NewAuth(jwksURL)
+	if err != nil {
+		log.Fatalf("vigia: failed to initialize auth middleware: %v", err)
+	}
+
+	obsHandlers := httpapi.NewHandlers(createMonitor, pauseMonitor, resumeMonitor, disableMonitor, queryHistory, queryMonitors, queryIncidents, queryAggregateHistory)
+	accHandlers := accounthttp.NewHandlers(getAccount, updateAccount)
+
+	mux := http.NewServeMux()
+	mux.Handle("/account", authMW(accounthttp.NewRouter(accHandlers)))
+	mux.Handle("/account/", authMW(accounthttp.NewRouter(accHandlers)))
+	mux.Handle("/", authMW(httpapi.NewRouter(obsHandlers)))
+
 	addr := envOrDefault("HTTP_ADDR", ":8080")
-	server := &http.Server{Addr: addr, Handler: httpapi.NewRouter(handlers)}
+	server := &http.Server{Addr: addr, Handler: mux}
 
 	go func() {
-		log.Printf("vigia: observability HTTP listening on %s", addr)
+		log.Printf("vigia: HTTP listening on %s", addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("vigia: HTTP server failed: %v", err)
 		}
@@ -108,7 +128,6 @@ func main() {
 func runDailySummaryLoop(ctx context.Context, uc *application.BuildDailySummary) {
 	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -124,7 +143,6 @@ func runDailySummaryLoop(ctx context.Context, uc *application.BuildDailySummary)
 func runDeliveryLoop(ctx context.Context, uc *notifapp.DeliverNotifications) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
-
 	for {
 		select {
 		case <-ctx.Done():

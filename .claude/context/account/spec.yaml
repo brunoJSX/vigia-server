@@ -1,0 +1,145 @@
+context: account
+
+version: 1
+
+status: draft
+
+concepts:
+
+  Account:
+    description: >
+      Representa o influenciador como entidade do domínio — dono da instalação e das
+      preferências de comunicação. Não é identidade (credenciais/sessão — responsabilidade
+      do Supabase Auth). Account.ID é o user_id do Supabase Auth, vínculo 1:1 imutável.
+      No MVP, armazena exclusivamente o WhatsAppNumber para notificações.
+    responsibilities:
+      - Armazenar preferências configuráveis do influenciador
+      - Ser a fonte de verdade do WhatsAppNumber para o contexto Notification
+    invariants:
+      - Account.ID é o user_id do Supabase Auth — imutável (RN-AC001)
+      - WhatsAppNumber, quando presente, está em formato E.164 (RN-AC005)
+      - WhatsAppNumber é nullable — account pode existir sem número configurado (RN-AC003)
+      - Uma Account por user_id — nunca duplicada (RN-AC001)
+
+  AuthMiddleware:
+    description: >
+      Mecanismo de infraestrutura — não é conceito de domínio. Valida o JWT emitido pelo
+      Supabase Auth em todo request à API, extrai o user_id e o injeta no contexto do
+      request. Rejeita requests sem JWT válido com 401.
+    responsibilities:
+      - Validar JWT via SUPABASE_JWT_SECRET
+      - Extrair user_id e disponibilizá-lo para os use cases
+
+infrastructure:
+
+  database:
+    table: accounts
+    schema: public
+    columns:
+      - id: TEXT PRIMARY KEY  # user_id do Supabase Auth
+      - whatsapp_number: TEXT nullable
+      - created_at: TIMESTAMPTZ NOT NULL DEFAULT now()
+      - updated_at: TIMESTAMPTZ NOT NULL DEFAULT now()
+
+  trigger:
+    name: on_auth_user_created
+    on: INSERT INTO auth.users
+    action: INSERT INTO public.accounts (id) VALUES (NEW.id)
+    note: >
+      Cria Account automaticamente para todo novo usuário do Supabase Auth.
+      Elimina necessidade de criação lazy no GET /account.
+
+http:
+
+  GET /account:
+    auth: JWT obrigatório
+    response:
+      - id: string
+      - whatsapp_number: string | null
+      - created_at: timestamp
+      - updated_at: timestamp
+
+  PATCH /account:
+    auth: JWT obrigatório
+    body:
+      - whatsapp_number: string | null
+    validation:
+      - whatsapp_number deve estar em formato E.164 quando não null
+    response:
+      - account atualizada
+
+workflows:
+
+  GetAccount:
+    input:
+      - user_id extraído do JWT pelo middleware
+    flow:
+      - Busca Account pelo user_id
+      - Se não encontrar, cria Account com whatsapp_number null (fallback lazy)
+      - Retorna Account
+    output:
+      - Account com preferências atuais
+
+  UpdateAccount:
+    input:
+      - user_id extraído do JWT pelo middleware
+      - whatsapp_number (string E.164 ou null)
+    flow:
+      - Valida formato do whatsapp_number (E.164 ou null)
+      - Atualiza Account (whatsapp_number + updated_at)
+      - Retorna Account atualizada
+    output:
+      - Account com preferências atualizadas
+
+  ResolveRecipient:
+    description: >
+      Use case interno consumido pelo contexto Notification para obter o WhatsAppNumber
+      antes de criar uma Notification. Substitui a leitura de variável de ambiente.
+    input:
+      - nenhum (single-tenant — há apenas uma Account)
+    flow:
+      - Busca a Account da instância
+      - Retorna WhatsAppNumber (pode ser null)
+    output:
+      - WhatsAppNumber string ou null
+
+rules:
+
+  - id: RN-AC001
+    description: >
+      Account.ID é o user_id do Supabase Auth. Vínculo 1:1 imutável —
+      nunca existe mais de uma Account para o mesmo user_id.
+
+  - id: RN-AC002
+    description: >
+      Account é criada automaticamente via trigger no INSERT de auth.users.
+      O Vigia não gerencia criação de usuários — apenas reage ao evento.
+
+  - id: RN-AC003
+    description: >
+      WhatsAppNumber é nullable. Account sem número não bloqueia o sistema —
+      notificações são silenciosamente ignoradas (RN-N006).
+
+  - id: RN-AC004
+    description: >
+      Account sem WhatsAppNumber configurado resulta em notificações não enviadas.
+      Sem erro — comportamento silencioso por design (RN-N006).
+
+  - id: RN-AC005
+    description: >
+      WhatsAppNumber, quando presente, deve estar em formato E.164
+      ('+' + código do país + número, ex: +5511999999999).
+
+  - id: RN-AC006
+    description: >
+      MVP single-tenant — uma instância do Vigia serve exatamente um influenciador.
+      ResolveRecipient não filtra por account_id.
+
+open_questions:
+  - nenhuma bloqueia a implementação.
+
+backlog:
+  - PA-AC01: Multi-usuário — Account evolui para Organization com membros.
+  - PA-AC02: account_id como FK em monitors (necessário para multi-tenancy).
+  - PA-AC03: Preferências de notificação por canal e por tipo de evento.
+  - PA-AC04: Exclusão de conta e seus dados.

@@ -11,19 +11,30 @@ import (
 	"github.com/vigia/vigia-v1/internal/notification/notification"
 )
 
-// Publisher adapts observability events to notification enqueue calls.
-type Publisher struct {
-	enqueue   *notifapp.EnqueueNotification
-	recipient string
+// RecipientResolver resolves the WhatsApp recipient number at publish time.
+// Implemented by account.ResolveRecipient — defined here to avoid cross-context import.
+type RecipientResolver interface {
+	Execute(ctx context.Context) (string, error)
 }
 
-func NewPublisher(enqueue *notifapp.EnqueueNotification, recipient string) *Publisher {
-	return &Publisher{enqueue: enqueue, recipient: recipient}
+// Publisher adapts observability events to notification enqueue calls.
+type Publisher struct {
+	enqueue  *notifapp.EnqueueNotification
+	resolver RecipientResolver
+}
+
+func NewPublisher(enqueue *notifapp.EnqueueNotification, resolver RecipientResolver) *Publisher {
+	return &Publisher{enqueue: enqueue, resolver: resolver}
 }
 
 func (p *Publisher) Publish(ctx context.Context, e obsapp.Event) error {
+	recipient, err := p.resolver.Execute(ctx)
+	if err != nil {
+		return err
+	}
+
 	var input notifapp.EnqueueInput
-	input.Recipient = p.recipient
+	input.Recipient = recipient
 
 	switch e.Kind {
 	case obsapp.EventIncidentOpened:
