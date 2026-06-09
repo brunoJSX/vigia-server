@@ -3,7 +3,7 @@
 
 CREATE TABLE IF NOT EXISTS monitors (
     id          TEXT PRIMARY KEY,
-    account_id  TEXT NOT NULL DEFAULT '',
+    account_id  TEXT NOT NULL,
     name        TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     target      TEXT NOT NULL,
