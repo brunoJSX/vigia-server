@@ -5,8 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"log"
 	"net/http"
 	"strings"
 )
@@ -47,8 +45,6 @@ func (p *WhatsAppProvider) Send(ctx context.Context, recipient, message string) 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		log.Printf("uazapi: delivery failed status=%d body=%s", resp.StatusCode, body)
 		return fmt.Errorf("uazapi: unexpected status %d", resp.StatusCode)
 	}
 	return nil

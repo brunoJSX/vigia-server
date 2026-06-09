@@ -3,7 +3,6 @@ package observability
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	obsapp "github.com/vigia/vigia-v1/internal/observability/application"
@@ -23,8 +22,6 @@ func NewPublisher(enqueue *notifapp.EnqueueNotification, recipient string) *Publ
 }
 
 func (p *Publisher) Publish(ctx context.Context, e obsapp.Event) error {
-	log.Printf("notification publisher: received event kind=%s recipient=%q", e.Kind, p.recipient)
-
 	var input notifapp.EnqueueInput
 	input.Recipient = p.recipient
 
@@ -41,13 +38,10 @@ func (p *Publisher) Publish(ctx context.Context, e obsapp.Event) error {
 			Duration:    formatDuration(payload.Duration),
 		}
 	default:
-		log.Printf("notification publisher: ignoring unknown event kind=%s", e.Kind)
 		return nil
 	}
 
-	err := p.enqueue.Execute(ctx, input)
-	log.Printf("notification publisher: enqueue result type=%s err=%v", input.Type, err)
-	return err
+	return p.enqueue.Execute(ctx, input)
 }
 
 func formatDuration(d time.Duration) string {
