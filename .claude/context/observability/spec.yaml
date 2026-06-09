@@ -1,0 +1,236 @@
+context: observability
+
+version: 1
+
+status: draft
+
+concepts:
+
+  Monitor:
+    description: >
+      Representa o que deve ser observado na operação — disponibilidade, performance de
+      checkout, dependências externas. Possui configuração própria (threshold, intervalo) e
+      status operacional. Monitor do tipo Checkout carrega adicionalmente
+      AcceptableResponseTime — o único limiar de tempo com significado de domínio para
+      Checkout: define dentro de quanto tempo o fluxo deve responder para não ser considerado
+      Lentidão. Para Uptime e Dependency, o tempo de espera do Collector é detalhe técnico
+      interno, sem representação no domínio.
+    responsibilities:
+      - Definir o alvo e a configuração de uma verificação contínua
+      - Manter status operacional (Active, Paused, Disabled)
+    invariants:
+      - Todo Monitor possui um status (RN-037)
+      - Checkout é um tipo especializado de Monitor (RN-024)
+      - Para Monitor do tipo Checkout, AcceptableResponseTime é obrigatório e define o limiar
+        de Lentidão; latência acima desse valor conta como ocorrência para fins de RN-027
+        (RN-025)
+
+  Incident:
+    description: >
+      Representa uma situação operacional relevante para o cliente — indisponibilidade,
+      lentidão, falha de dependência.
+    responsibilities:
+      - Registrar uma situação operacional detectada e seu lifecycle (Open, Resolved)
+      - Carregar a duração do problema que representa
+    invariants:
+      - Possui dois estados possíveis: Open e Resolved (RN-038)
+      - Um Incident em estado Resolved não retorna a Open
+      - Carrega a duração do problema que representa (RN-012)
+
+processing_pipeline:
+
+  Collector:
+    description: >
+      Mecanismo interno (não conceito de domínio / não linguagem ubíqua — rótulo provisório,
+      ver domain-discovery.md) responsável por obter o dado bruto de uma verificação de
+      Monitor (ex.: resposta HTTP, tempo de carregamento, status de dependência). Considera
+      sucesso apenas respostas com status HTTP 2xx ou 3xx; 4xx e 5xx são registrados como
+      falha (Sample.Success = false). O timeout interno é derivado automaticamente: para
+      Checkout, a partir de AcceptableResponseTime do Monitor (com fator multiplicador
+      interno); para demais tipos, utiliza um valor padrão técnico. Esse timeout não é
+      conceito de domínio e não é persistido.
+
+  Analyzer:
+    description: >
+      Mecanismo interno (não conceito de domínio / não linguagem ubíqua — rótulo provisório,
+      ver domain-discovery.md) responsável por interpretar dados coletados contra threshold e
+      regras de consecutividade, produzindo uma Decision sobre o estado de um Incident.
+      Analyzer é type-aware: para Checkout, avalia latência do Sample contra
+      AcceptableResponseTime do Monitor (Lentidão — RN-025); para Uptime e Dependency,
+      avalia alcançabilidade (Sample.Success).
+
+decisions:
+  - NoAction
+  - OpenIncident
+  - ResolveIncident
+
+workflows:
+
+  CreateMonitor:
+    input:
+      - configuração de verificação (alvo, tipo, threshold, intervalo)
+      - acceptable_response_time (obrigatório apenas para tipo Checkout — RN-025)
+    flow:
+      - Monitor é criado com status Active (RN-037)
+    output:
+      - monitor (criado, status Active)
+
+  PauseMonitor:
+    input:
+      - monitor
+    flow:
+      - Status do Monitor é alterado para Paused (RN-037, RN-028)
+    output:
+      - monitor (status Paused)
+
+  ResumeMonitor:
+    input:
+      - monitor
+    flow:
+      - Status do Monitor é alterado para Active (RN-037, RN-028)
+    output:
+      - monitor (status Active)
+
+  DisableMonitor:
+    input:
+      - monitor
+    flow:
+      - Status do Monitor é alterado para Disabled (RN-037, RN-028)
+    output:
+      - monitor (status Disabled)
+
+  CheckMonitor:
+    input:
+      - monitor
+    flow:
+      - Collector obtém dados da operação
+      - Dados coletados são registrados
+      - Analyzer interpreta os dados coletados
+      - Decision é tomada (NoAction | OpenIncident | ResolveIncident)
+    output:
+      - incident (aberto, encerrado ou inalterado)
+
+  ResolveIncident:
+    input:
+      - monitor com Incident em estado Open
+    flow:
+      - Collector obtém dados da operação
+      - Analyzer detecta recuperação nos dados coletados
+      - Decision = ResolveIncident
+      - Incident é encerrado e sua duração é calculada
+    output:
+      - incident (estado Resolved)
+
+  QueryHistory:
+    input:
+      - período selecionado pelo influenciador
+    flow:
+      - Sistema consulta incidentes do período
+      - Sistema calcula métricas de disponibilidade a partir dos dados coletados
+    output:
+      - histórico de incidentes e métricas de disponibilidade
+
+  BuildDailySummary:
+    input:
+      - execução diária agendada
+    flow:
+      - Sistema consolida incidentes e dados coletados do dia anterior
+      - Resumo é gerado
+    output:
+      - resumo diário disponibilizado ao cliente
+
+rules:
+
+  - id: RN-001
+    description: >
+      O sistema executa verificações para um Monitor, respeitando o intervalo configurado.
+
+  - id: RN-002
+    description: >
+      Para um mesmo Monitor, o sistema mantém no máximo um Incident em estado Open
+      simultaneamente.
+
+  - id: RN-012
+    description: Um Incident encerrado tem sua duração calculada.
+
+  - id: RN-016
+    description: >
+      Consulta de histórico é um processo somente leitura — não produz Decision nem altera
+      o estado de Monitor ou Incident.
+
+  - id: RN-024
+    description: Checkout é um tipo especializado de Monitor.
+
+  - id: RN-025
+    description: >
+      Para Monitor do tipo Checkout, AcceptableResponseTime é obrigatório. Qualquer Sample com
+      latência acima de AcceptableResponseTime conta como ocorrência de degradação (Lentidão)
+      para fins de RN-027, independentemente de Sample.Success.
+
+  - id: RN-027
+    description: Abertura de Incident depende de threshold de ocorrências consecutivas.
+
+  - id: RN-028
+    description: >
+      Atualização do estado de um Monitor respeita o vínculo de no-máximo-um-Incident-Open
+      mantido pelo sistema.
+
+  - id: RN-030
+    description: >
+      O resumo diário é gerado de forma recorrente, mesmo quando não houve incidentes no
+      período.
+
+  - id: RN-031
+    description: >
+      O resumo diário consolida incidentes e dados operacionais coletados ao longo do dia
+      anterior.
+
+  - id: RN-032
+    description: >
+      A entrega do resumo diário ao cliente utiliza os mesmos canais de comunicação já
+      configurados — ownership de Notification segue em aberto (PA-005).
+
+  - id: RN-033
+    description: O resumo diário, após gerado, é disponibilizado ao cliente.
+
+  - id: RN-037
+    description: Monitor possui status operacional (Active, Paused, Disabled).
+
+  - id: RN-038
+    description: Incident possui status (Open, Resolved); Resolved não retorna a Open.
+
+open_questions:
+
+  - id: PA-001
+    description: >
+      Uptime, Checkout e Dependency são especializações de Monitor ou conceitos próprios com
+      atributos compartilhados? (RN-024 aponta especialização, sem detalhar a expressão
+      conceitual)
+
+  - id: PA-002
+    description: >
+      Dependency é conceito de primeira classe ou apenas configuração de um Monitor?
+
+  - id: PA-003
+    description: >
+      DailySummary é conceito próprio ou agregação/consulta sobre Incident e dados
+      operacionais?
+
+  - id: PA-004
+    description: >
+      Por quanto tempo os dados operacionais (verificações/medições) devem ser retidos?
+      (PA-023 do documento-fonte)
+
+  - id: PA-005
+    description: >
+      Quem é o dono de Notification — este contexto, um contexto dedicado de comunicações, ou
+      infraestrutura compartilhada? (afeta o passo "cliente é informado" em CheckMonitor,
+      ResolveIncident e BuildDailySummary)
+
+closed_decisions:
+
+  - id: CD-001
+    description: >
+      Semântica de Success no Collector: sucesso = HTTP 2xx ou 3xx; 4xx e 5xx = falha
+      (Sample.Success = false). Decisão MVP; revisitar se surgir necessidade de configurar
+      expected status codes por Monitor.

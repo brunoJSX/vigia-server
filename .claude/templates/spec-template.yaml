@@ -1,0 +1,54 @@
+context: example
+
+version: 1
+
+status: draft
+
+concepts:
+
+Monitor:
+description: ""
+
+```
+responsibilities:
+  - ""
+
+invariants:
+  - ""
+```
+
+Collector:
+description: ""
+
+Analyzer:
+description: ""
+
+Incident:
+description: ""
+
+workflows:
+
+ExecuteMonitor:
+
+```
+input:
+  - monitor
+
+flow:
+  - collect data
+  - analyze data
+  - detect problems
+
+output:
+  - incident
+```
+
+rules:
+
+* id: RN-001
+  description: ""
+
+open_questions:
+
+* id: PA-001
+  description: ""
