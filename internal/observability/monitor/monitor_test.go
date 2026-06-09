@@ -9,7 +9,7 @@ import (
 
 // RN-037: every Monitor has a status.
 func TestNew_AlwaysHasAStatus(t *testing.T) {
-	m := monitor.New("mon-1", "Test Monitor", "", "https://example.com", monitor.TypeUptime, 3, time.Minute, 0)
+	m := monitor.New("mon-1", "acc-1", "Test Monitor", "", "https://example.com", monitor.TypeUptime, 3, time.Minute, 0)
 
 	if m.Status == "" {
 		t.Fatal("expected Monitor to be created with a status, got empty string")
@@ -20,7 +20,7 @@ func TestNew_AlwaysHasAStatus(t *testing.T) {
 }
 
 func TestPauseResumeDisable_TransitionStatus(t *testing.T) {
-	m := monitor.New("mon-1", "Test Monitor", "", "https://example.com", monitor.TypeUptime, 3, time.Minute, 0)
+	m := monitor.New("mon-1", "acc-1", "Test Monitor", "", "https://example.com", monitor.TypeUptime, 3, time.Minute, 0)
 
 	m.Pause()
 	if m.Status != monitor.StatusPaused {
@@ -41,7 +41,7 @@ func TestPauseResumeDisable_TransitionStatus(t *testing.T) {
 // RN-024: Checkout is a specialized Monitor type — modeled as a Type value,
 // behaving like any other Monitor (no parallel struct).
 func TestCheckoutType_BehavesAsRegularMonitor(t *testing.T) {
-	m := monitor.New("mon-2", "Test Checkout", "", "https://example.com/checkout", monitor.TypeCheckout, 3, time.Minute, 3*time.Second)
+	m := monitor.New("mon-2", "acc-1", "Test Checkout", "", "https://example.com/checkout", monitor.TypeCheckout, 3, time.Minute, 3*time.Second)
 
 	if m.Type != monitor.TypeCheckout {
 		t.Fatalf("expected Type Checkout, got %q", m.Type)
@@ -55,7 +55,7 @@ func TestCheckoutType_BehavesAsRegularMonitor(t *testing.T) {
 // require it (zero is valid for non-Checkout types).
 func TestCheckoutMonitor_CarriesAcceptableResponseTime(t *testing.T) {
 	art := 3 * time.Second
-	m := monitor.New("mon-3", "Test Checkout", "", "https://example.com/checkout", monitor.TypeCheckout, 3, time.Minute, art)
+	m := monitor.New("mon-3", "acc-1", "Test Checkout", "", "https://example.com/checkout", monitor.TypeCheckout, 3, time.Minute, art)
 
 	if m.AcceptableResponseTime != art {
 		t.Fatalf("expected AcceptableResponseTime %v, got %v", art, m.AcceptableResponseTime)
@@ -63,7 +63,7 @@ func TestCheckoutMonitor_CarriesAcceptableResponseTime(t *testing.T) {
 }
 
 func TestUptimeMonitor_ZeroAcceptableResponseTime_IsValid(t *testing.T) {
-	m := monitor.New("mon-4", "Test Monitor", "", "https://example.com", monitor.TypeUptime, 3, time.Minute, 0)
+	m := monitor.New("mon-4", "acc-1", "Test Monitor", "", "https://example.com", monitor.TypeUptime, 3, time.Minute, 0)
 
 	if m.AcceptableResponseTime != 0 {
 		t.Fatalf("expected AcceptableResponseTime to be zero for Uptime, got %v", m.AcceptableResponseTime)

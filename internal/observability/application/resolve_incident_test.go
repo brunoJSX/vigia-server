@@ -23,7 +23,7 @@ func TestResolveIncident_ClosesOpenIncidentAndPublishesEvent(t *testing.T) {
 	}
 
 	uc := application.NewResolveIncident(incidents, publisher, fixedClock(resolvedAt))
-	if err := uc.Execute(ctx, "mon-1", "Test Monitor"); err != nil {
+	if err := uc.Execute(ctx, "mon-1", "Test Monitor", "acc-1"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -57,7 +57,7 @@ func TestResolveIncident_NoOpenIncident_DoesNothing(t *testing.T) {
 	publisher := &spyPublisher{}
 
 	uc := application.NewResolveIncident(incidents, publisher, fixedClock(time.Now()))
-	if err := uc.Execute(ctx, "mon-1", "Test Monitor"); err != nil {
+	if err := uc.Execute(ctx, "mon-1", "Test Monitor", "acc-1"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 

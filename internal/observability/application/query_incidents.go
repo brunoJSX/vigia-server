@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/vigia/vigia-v1/internal/observability/incident"
+	"github.com/vigia/vigia-v1/internal/observability/monitor"
 )
 
 // IncidentView enriches an Incident with the name of the Monitor it belongs to.
@@ -13,6 +14,7 @@ type IncidentView struct {
 }
 
 type QueryIncidentsInput struct {
+	AccountID string
 	// Status filters by Incident status. Empty string returns all incidents.
 	Status incident.Status
 	// Limit caps the number of results. 0 means no limit.
@@ -37,25 +39,29 @@ func (uc *QueryIncidents) Execute(ctx context.Context, in QueryIncidentsInput) (
 		return nil, nil
 	}
 
-	// Collect unique monitor IDs, then fetch names in one pass.
+	// Collect unique monitor IDs, fetch names and filter by account in one pass.
 	seen := make(map[string]bool, len(incidents))
 	for _, i := range incidents {
 		seen[i.MonitorID] = true
 	}
-	names := make(map[string]string, len(seen))
+	monitorByID := make(map[string]monitor.Monitor, len(seen))
 	for monitorID := range seen {
 		m, err := uc.monitors.FindByID(ctx, monitorID)
 		if err == nil {
-			names[monitorID] = m.Name
+			monitorByID[monitorID] = m
 		}
 	}
 
-	views := make([]IncidentView, len(incidents))
-	for i, inc := range incidents {
-		views[i] = IncidentView{
-			Incident:    inc,
-			MonitorName: names[inc.MonitorID],
+	views := make([]IncidentView, 0, len(incidents))
+	for _, inc := range incidents {
+		m, ok := monitorByID[inc.MonitorID]
+		if !ok || m.AccountID != in.AccountID {
+			continue
 		}
+		views = append(views, IncidentView{
+			Incident:    inc,
+			MonitorName: m.Name,
+		})
 	}
 	return views, nil
 }

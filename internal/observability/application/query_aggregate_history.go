@@ -32,19 +32,31 @@ type AggregateHistoryResult struct {
 	Daily                  []DailyStats `json:"daily"`
 }
 
-func (uc *QueryAggregateHistory) Execute(ctx context.Context, days int) (AggregateHistoryResult, error) {
+func (uc *QueryAggregateHistory) Execute(ctx context.Context, accountID string, days int) (AggregateHistoryResult, error) {
 	now := uc.clock()
 	to := now
 	from := now.AddDate(0, 0, -days)
 
-	monitors, err := uc.monitors.FindAll(ctx)
+	monitors, err := uc.monitors.FindAllByAccount(ctx, accountID)
 	if err != nil {
 		return AggregateHistoryResult{}, err
 	}
 
-	incidents, err := uc.incidents.FindByPeriod(ctx, from, to)
+	allIncidents, err := uc.incidents.FindByPeriod(ctx, from, to)
 	if err != nil {
 		return AggregateHistoryResult{}, err
+	}
+
+	// Filter incidents to only those belonging to this account's monitors.
+	monitorIDSet := make(map[string]bool, len(monitors))
+	for _, m := range monitors {
+		monitorIDSet[m.ID] = true
+	}
+	incidents := allIncidents[:0]
+	for _, inc := range allIncidents {
+		if monitorIDSet[inc.MonitorID] {
+			incidents = append(incidents, inc)
+		}
 	}
 
 	periodSecs := to.Sub(from).Seconds()

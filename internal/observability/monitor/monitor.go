@@ -33,6 +33,7 @@ const (
 // Dependency — those types have no domain-level time threshold.
 type Monitor struct {
 	ID                     string
+	AccountID              string
 	Name                   string
 	Description            string
 	Target                 string
@@ -47,9 +48,10 @@ type Monitor struct {
 // (RN-037), so there is no constructor path that leaves it undefined.
 // For Checkout monitors, acceptableResponseTime must be > 0 (RN-025).
 // For other types, pass 0.
-func New(id, name, description, target string, monitorType Type, threshold int, interval, acceptableResponseTime time.Duration) Monitor {
+func New(id, accountID, name, description, target string, monitorType Type, threshold int, interval, acceptableResponseTime time.Duration) Monitor {
 	return Monitor{
 		ID:                     id,
+		AccountID:              accountID,
 		Name:                   name,
 		Description:            description,
 		Target:                 target,

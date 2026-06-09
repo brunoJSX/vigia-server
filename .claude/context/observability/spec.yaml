@@ -9,22 +9,26 @@ concepts:
   Monitor:
     description: >
       Representa o que deve ser observado na operação — disponibilidade, performance de
-      checkout, dependências externas. Possui nome legível (Name), descrição opcional
-      (Description), configuração própria (threshold, intervalo) e status operacional.
-      Monitor do tipo Checkout carrega adicionalmente AcceptableResponseTime — o único
-      limiar de tempo com significado de domínio para Checkout: define dentro de quanto
-      tempo o fluxo deve responder para não ser considerado Lentidão. Para Uptime e
+      checkout, dependências externas. Pertence a uma Account (AccountID) — cada Monitor
+      é de propriedade exclusiva de um influenciador. Possui nome legível (Name), descrição
+      opcional (Description), configuração própria (threshold, intervalo) e status
+      operacional. Monitor do tipo Checkout carrega adicionalmente AcceptableResponseTime —
+      o único limiar de tempo com significado de domínio para Checkout: define dentro de
+      quanto tempo o fluxo deve responder para não ser considerado Lentidão. Para Uptime e
       Dependency, o tempo de espera do Collector é detalhe técnico interno, sem
       representação no domínio.
     responsibilities:
       - Definir o alvo e a configuração de uma verificação contínua
       - Manter status operacional (Active, Paused, Disabled)
+      - Registrar a qual Account pertence
     invariants:
+      - Todo Monitor pertence a exatamente uma Account (AccountID obrigatório)
       - Todo Monitor possui um status (RN-037)
       - Checkout é um tipo especializado de Monitor (RN-024)
       - Para Monitor do tipo Checkout, AcceptableResponseTime é obrigatório e define o limiar
         de Lentidão; latência acima desse valor conta como ocorrência para fins de RN-027
         (RN-025)
+      - Operações de lifecycle (Pause, Resume, Disable) só são permitidas ao dono (AccountID)
 
   Incident:
     description: >
@@ -70,12 +74,13 @@ workflows:
 
   CreateMonitor:
     input:
+      - accountID (dono do monitor — extraído do JWT)
       - configuração de verificação (alvo, tipo, threshold, intervalo)
       - acceptable_response_time (obrigatório apenas para tipo Checkout — RN-025)
     flow:
-      - Monitor é criado com status Active (RN-037)
+      - Monitor é criado com status Active (RN-037) vinculado ao accountID
     output:
-      - monitor (criado, status Active)
+      - monitor (criado, status Active, AccountID preenchido)
 
   PauseMonitor:
     input:
@@ -125,9 +130,9 @@ workflows:
 
   QueryMonitors:
     input:
-      - nenhum (retorna todos os monitors)
+      - accountID (extraído do JWT)
     flow:
-      - Busca todos os monitors
+      - Busca todos os monitors do accountID
       - Deriva current_state por monitor (functioning / slow / down) a partir de Incident aberto
       - Retorna last_checked_at a partir do último Sample registrado
     output:
@@ -135,10 +140,12 @@ workflows:
 
   QueryIncidents:
     input:
+      - accountID (extraído do JWT)
       - status (open | resolved | todos)
       - limit opcional
     flow:
       - Busca incidents pelo status, ordenados por opened_at desc
+      - Filtra incidents cujos monitors pertencem ao accountID
       - Enriquece com nome do Monitor para exibição
     output:
       - lista de IncidentView (incident + monitor_name + display_id INC-N)

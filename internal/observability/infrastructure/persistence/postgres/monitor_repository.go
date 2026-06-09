@@ -24,7 +24,7 @@ func NewMonitorRepository(pool *pgxpool.Pool) *MonitorRepository {
 	return &MonitorRepository{pool: pool}
 }
 
-const monitorColumns = `id, name, description, target, type, status, threshold, interval_ns, acceptable_response_time_ns`
+const monitorColumns = `id, account_id, name, description, target, type, status, threshold, interval_ns, acceptable_response_time_ns`
 
 func (r *MonitorRepository) Save(ctx context.Context, m monitor.Monitor) error {
 	var art *int64
@@ -33,9 +33,10 @@ func (r *MonitorRepository) Save(ctx context.Context, m monitor.Monitor) error {
 		art = &v
 	}
 	_, err := r.pool.Exec(ctx, `
-		INSERT INTO monitors (id, name, description, target, type, status, threshold, interval_ns, acceptable_response_time_ns, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now(), now())
+		INSERT INTO monitors (id, account_id, name, description, target, type, status, threshold, interval_ns, acceptable_response_time_ns, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now(), now())
 		ON CONFLICT (id) DO UPDATE SET
+			account_id                  = EXCLUDED.account_id,
 			name                        = EXCLUDED.name,
 			description                 = EXCLUDED.description,
 			target                      = EXCLUDED.target,
@@ -45,7 +46,7 @@ func (r *MonitorRepository) Save(ctx context.Context, m monitor.Monitor) error {
 			interval_ns                 = EXCLUDED.interval_ns,
 			acceptable_response_time_ns = EXCLUDED.acceptable_response_time_ns,
 			updated_at                  = now()
-	`, m.ID, m.Name, m.Description, m.Target, string(m.Type), string(m.Status), m.Threshold, int64(m.Interval), art)
+	`, m.ID, m.AccountID, m.Name, m.Description, m.Target, string(m.Type), string(m.Status), m.Threshold, int64(m.Interval), art)
 	return err
 }
 
@@ -81,8 +82,8 @@ func (r *MonitorRepository) FindActive(ctx context.Context) ([]monitor.Monitor, 
 	return out, rows.Err()
 }
 
-func (r *MonitorRepository) FindAll(ctx context.Context) ([]monitor.Monitor, error) {
-	rows, err := r.pool.Query(ctx, `SELECT `+monitorColumns+` FROM monitors ORDER BY created_at DESC`)
+func (r *MonitorRepository) FindAllByAccount(ctx context.Context, accountID string) ([]monitor.Monitor, error) {
+	rows, err := r.pool.Query(ctx, `SELECT `+monitorColumns+` FROM monitors WHERE account_id = $1 ORDER BY created_at DESC`, accountID)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +113,7 @@ func scanMonitor(row rowScanner) (monitor.Monitor, error) {
 		artNS       *int64
 	)
 
-	if err := row.Scan(&m.ID, &m.Name, &m.Description, &m.Target, &monitorType, &status, &m.Threshold, &intervalNS, &artNS); err != nil {
+	if err := row.Scan(&m.ID, &m.AccountID, &m.Name, &m.Description, &m.Target, &monitorType, &status, &m.Threshold, &intervalNS, &artNS); err != nil {
 		return monitor.Monitor{}, err
 	}
 

@@ -36,8 +36,8 @@ func NewQueryMonitors(monitors MonitorRepository, incidents IncidentRepository, 
 	return &QueryMonitors{monitors: monitors, incidents: incidents, samples: samples}
 }
 
-func (uc *QueryMonitors) Execute(ctx context.Context) ([]MonitorView, error) {
-	monitors, err := uc.monitors.FindAll(ctx)
+func (uc *QueryMonitors) Execute(ctx context.Context, accountID string) ([]MonitorView, error) {
+	monitors, err := uc.monitors.FindAllByAccount(ctx, accountID)
 	if err != nil {
 		return nil, err
 	}

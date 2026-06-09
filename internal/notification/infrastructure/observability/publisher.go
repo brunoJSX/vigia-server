@@ -11,10 +11,10 @@ import (
 	"github.com/vigia/vigia-v1/internal/notification/notification"
 )
 
-// RecipientResolver resolves the WhatsApp recipient number at publish time.
+// RecipientResolver resolves the WhatsApp recipient number for an account.
 // Implemented by account.ResolveRecipient — defined here to avoid cross-context import.
 type RecipientResolver interface {
-	Execute(ctx context.Context) (string, error)
+	Execute(ctx context.Context, accountID string) (string, error)
 }
 
 // Publisher adapts observability events to notification enqueue calls.
@@ -28,7 +28,7 @@ func NewPublisher(enqueue *notifapp.EnqueueNotification, resolver RecipientResol
 }
 
 func (p *Publisher) Publish(ctx context.Context, e obsapp.Event) error {
-	recipient, err := p.resolver.Execute(ctx)
+	recipient, err := p.resolver.Execute(ctx, e.AccountID)
 	if err != nil {
 		return err
 	}

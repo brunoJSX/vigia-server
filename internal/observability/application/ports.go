@@ -18,7 +18,7 @@ type MonitorRepository interface {
 	Save(ctx context.Context, m monitor.Monitor) error
 	FindByID(ctx context.Context, id string) (monitor.Monitor, error)
 	FindActive(ctx context.Context) ([]monitor.Monitor, error)
-	FindAll(ctx context.Context) ([]monitor.Monitor, error)
+	FindAllByAccount(ctx context.Context, accountID string) ([]monitor.Monitor, error)
 }
 
 // IncidentRepository persists and retrieves Incidents.
@@ -77,6 +77,7 @@ const (
 // relevant. Payload holds kind-specific data (e.g. a DailySummary).
 type Event struct {
 	Kind       EventKind
+	AccountID  string
 	MonitorID  string
 	IncidentID string
 	OccurredAt time.Time

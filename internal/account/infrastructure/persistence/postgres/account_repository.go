@@ -54,13 +54,12 @@ func (r *AccountRepository) Save(ctx context.Context, a account.Account) error {
 	return err
 }
 
-func (r *AccountRepository) FindWhatsAppNumber(ctx context.Context) (string, error) {
+func (r *AccountRepository) FindWhatsAppNumber(ctx context.Context, accountID string) (string, error) {
 	var number string
 	err := r.pool.QueryRow(ctx, `
 		SELECT whatsapp_number FROM accounts
-		WHERE whatsapp_number IS NOT NULL
-		LIMIT 1
-	`).Scan(&number)
+		WHERE id = $1 AND whatsapp_number IS NOT NULL
+	`, accountID).Scan(&number)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", nil
 	}

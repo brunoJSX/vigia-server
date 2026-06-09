@@ -1,6 +1,9 @@
 package application
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 // ResumeMonitor transitions a Monitor back to Active (RN-037).
 type ResumeMonitor struct {
@@ -11,10 +14,13 @@ func NewResumeMonitor(monitors MonitorRepository) *ResumeMonitor {
 	return &ResumeMonitor{monitors: monitors}
 }
 
-func (uc *ResumeMonitor) Execute(ctx context.Context, monitorID string) error {
+func (uc *ResumeMonitor) Execute(ctx context.Context, monitorID, accountID string) error {
 	m, err := uc.monitors.FindByID(ctx, monitorID)
 	if err != nil {
 		return err
+	}
+	if m.AccountID != accountID {
+		return fmt.Errorf("monitor %q not found", monitorID)
 	}
 
 	m.Resume()

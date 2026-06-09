@@ -20,7 +20,7 @@ func NewResolveIncident(incidents IncidentRepository, notifications Notification
 	return &ResolveIncident{incidents: incidents, notifications: notifications, clock: c}
 }
 
-func (uc *ResolveIncident) Execute(ctx context.Context, monitorID, monitorName string) error {
+func (uc *ResolveIncident) Execute(ctx context.Context, monitorID, monitorName, accountID string) error {
 	open, err := uc.incidents.FindOpenByMonitorID(ctx, monitorID)
 	if err != nil {
 		return err
@@ -38,6 +38,7 @@ func (uc *ResolveIncident) Execute(ctx context.Context, monitorID, monitorName s
 
 	return uc.notifications.Publish(ctx, Event{
 		Kind:       EventIncidentResolved,
+		AccountID:  accountID,
 		MonitorID:  open.MonitorID,
 		IncidentID: open.ID,
 		OccurredAt: now,

@@ -12,7 +12,7 @@ import (
 )
 
 func newTestMonitor(id string) monitor.Monitor {
-	return monitor.New(id, "Test Monitor", "", "https://example.com", monitor.TypeUptime, 3, time.Minute, 5*time.Second)
+	return monitor.New(id, "acc-1", "Test Monitor", "", "https://example.com", monitor.TypeUptime, 3, time.Minute, 5*time.Second)
 }
 
 // RN-037: status transitions move a Monitor between Active, Paused and Disabled.
@@ -25,7 +25,7 @@ func TestPauseMonitor_TransitionsToPaused(t *testing.T) {
 	}
 
 	uc := application.NewPauseMonitor(monitors)
-	if err := uc.Execute(ctx, m.ID); err != nil {
+	if err := uc.Execute(ctx, m.ID, m.AccountID); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -57,7 +57,7 @@ func TestPauseMonitor_DoesNotAffectExistingOpenIncident(t *testing.T) {
 	}
 
 	uc := application.NewPauseMonitor(monitors)
-	if err := uc.Execute(ctx, m.ID); err != nil {
+	if err := uc.Execute(ctx, m.ID, m.AccountID); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -80,7 +80,7 @@ func TestResumeMonitor_TransitionsToActive(t *testing.T) {
 	}
 
 	uc := application.NewResumeMonitor(monitors)
-	if err := uc.Execute(ctx, m.ID); err != nil {
+	if err := uc.Execute(ctx, m.ID, m.AccountID); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -102,7 +102,7 @@ func TestDisableMonitor_TransitionsToDisabled(t *testing.T) {
 	}
 
 	uc := application.NewDisableMonitor(monitors)
-	if err := uc.Execute(ctx, m.ID); err != nil {
+	if err := uc.Execute(ctx, m.ID, m.AccountID); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 

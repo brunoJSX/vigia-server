@@ -17,6 +17,7 @@ import (
 	"github.com/vigia/vigia-v1/internal/observability/application"
 	"github.com/vigia/vigia-v1/internal/observability/incident"
 	"github.com/vigia/vigia-v1/internal/observability/monitor"
+	"github.com/vigia/vigia-v1/internal/shared/middleware"
 )
 
 type Handlers struct {
@@ -107,6 +108,8 @@ func newMonitorViewResponse(v application.MonitorView) monitorViewResponse {
 }
 
 func (h *Handlers) CreateMonitor(w http.ResponseWriter, r *http.Request) {
+	accountID := middleware.UserIDFromContext(r.Context())
+
 	var req createMonitorRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
@@ -123,6 +126,7 @@ func (h *Handlers) CreateMonitor(w http.ResponseWriter, r *http.Request) {
 	}
 
 	m, err := h.createMonitor.Execute(r.Context(), application.CreateMonitorInput{
+		AccountID:              accountID,
 		Name:                   req.Name,
 		Description:            req.Description,
 		Target:                 req.Target,
@@ -140,7 +144,8 @@ func (h *Handlers) CreateMonitor(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) ListMonitors(w http.ResponseWriter, r *http.Request) {
-	views, err := h.queryMonitors.Execute(r.Context())
+	accountID := middleware.UserIDFromContext(r.Context())
+	views, err := h.queryMonitors.Execute(r.Context(), accountID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -170,8 +175,9 @@ func (h *Handlers) ListIncidents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	views, err := h.queryIncidents.Execute(r.Context(), application.QueryIncidentsInput{
-		Status: status,
-		Limit:  50,
+		AccountID: middleware.UserIDFromContext(r.Context()),
+		Status:    status,
+		Limit:     50,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -206,7 +212,8 @@ func (h *Handlers) ListIncidents(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) PauseMonitor(w http.ResponseWriter, r *http.Request) {
-	if err := h.pauseMonitor.Execute(r.Context(), r.PathValue("id")); err != nil {
+	accountID := middleware.UserIDFromContext(r.Context())
+	if err := h.pauseMonitor.Execute(r.Context(), r.PathValue("id"), accountID); err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
@@ -214,7 +221,8 @@ func (h *Handlers) PauseMonitor(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) ResumeMonitor(w http.ResponseWriter, r *http.Request) {
-	if err := h.resumeMonitor.Execute(r.Context(), r.PathValue("id")); err != nil {
+	accountID := middleware.UserIDFromContext(r.Context())
+	if err := h.resumeMonitor.Execute(r.Context(), r.PathValue("id"), accountID); err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
@@ -222,7 +230,8 @@ func (h *Handlers) ResumeMonitor(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) DisableMonitor(w http.ResponseWriter, r *http.Request) {
-	if err := h.disableMonitor.Execute(r.Context(), r.PathValue("id")); err != nil {
+	accountID := middleware.UserIDFromContext(r.Context())
+	if err := h.disableMonitor.Execute(r.Context(), r.PathValue("id"), accountID); err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
@@ -294,7 +303,7 @@ func (h *Handlers) AggregateHistory(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	result, err := h.queryAggregateHistory.Execute(r.Context(), days)
+	result, err := h.queryAggregateHistory.Execute(r.Context(), middleware.UserIDFromContext(r.Context()), days)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

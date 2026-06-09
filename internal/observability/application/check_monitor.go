@@ -105,13 +105,14 @@ func (uc *CheckMonitor) Execute(ctx context.Context, monitorID string) error {
 		}
 		return uc.notifications.Publish(ctx, Event{
 			Kind:       EventIncidentOpened,
+			AccountID:  m.AccountID,
 			MonitorID:  m.ID,
 			IncidentID: inc.ID,
 			OccurredAt: now,
 			Payload:    IncidentOpenedPayload{MonitorName: m.Name},
 		})
 	case analyzer.DecisionResolveIncident:
-		return uc.resolveIncident.Execute(ctx, m.ID, m.Name)
+		return uc.resolveIncident.Execute(ctx, m.ID, m.Name, m.AccountID)
 	default:
 		return nil
 	}

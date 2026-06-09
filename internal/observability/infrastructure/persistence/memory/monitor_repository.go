@@ -52,13 +52,15 @@ func (r *MonitorRepository) FindActive(ctx context.Context) ([]monitor.Monitor, 
 	return active, nil
 }
 
-func (r *MonitorRepository) FindAll(ctx context.Context) ([]monitor.Monitor, error) {
+func (r *MonitorRepository) FindAllByAccount(ctx context.Context, accountID string) ([]monitor.Monitor, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	out := make([]monitor.Monitor, 0, len(r.monitors))
+	var out []monitor.Monitor
 	for _, m := range r.monitors {
-		out = append(out, m)
+		if m.AccountID == accountID {
+			out = append(out, m)
+		}
 	}
 	return out, nil
 }

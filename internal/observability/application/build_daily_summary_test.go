@@ -23,12 +23,12 @@ func TestBuildDailySummary_ConsolidatesPreviousDayPerActiveMonitor(t *testing.T)
 	now := time.Date(2026, 6, 8, 3, 0, 0, 0, time.UTC)
 	yesterday := now.AddDate(0, 0, -1).Truncate(24 * time.Hour)
 
-	active := monitor.New("mon-active", "Active Monitor", "", "https://example.com", monitor.TypeUptime, 3, time.Minute, 5*time.Second)
+	active := monitor.New("mon-active", "acc-1", "Active Monitor", "", "https://example.com", monitor.TypeUptime, 3, time.Minute, 5*time.Second)
 	if err := monitors.Save(ctx, active); err != nil {
 		t.Fatalf("setup: %v", err)
 	}
 
-	paused := monitor.New("mon-paused", "Paused Monitor", "", "https://example.org", monitor.TypeUptime, 3, time.Minute, 5*time.Second)
+	paused := monitor.New("mon-paused", "acc-1", "Paused Monitor", "", "https://example.org", monitor.TypeUptime, 3, time.Minute, 5*time.Second)
 	paused.Pause()
 	if err := monitors.Save(ctx, paused); err != nil {
 		t.Fatalf("setup: %v", err)

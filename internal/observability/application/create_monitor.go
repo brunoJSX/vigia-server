@@ -20,6 +20,7 @@ func NewCreateMonitor(monitors MonitorRepository, ids id.Generator) *CreateMonit
 }
 
 type CreateMonitorInput struct {
+	AccountID              string
 	Name                   string
 	Description            string
 	Target                 string
@@ -30,7 +31,7 @@ type CreateMonitorInput struct {
 }
 
 func (uc *CreateMonitor) Execute(ctx context.Context, in CreateMonitorInput) (monitor.Monitor, error) {
-	m := monitor.New(uc.ids(), in.Name, in.Description, in.Target, in.Type, in.Threshold, in.Interval, in.AcceptableResponseTime)
+	m := monitor.New(uc.ids(), in.AccountID, in.Name, in.Description, in.Target, in.Type, in.Threshold, in.Interval, in.AcceptableResponseTime)
 
 	if err := uc.monitors.Save(ctx, m); err != nil {
 		return monitor.Monitor{}, err
