@@ -49,6 +49,17 @@ type SampleRepository interface {
 	FindLastTimestamps(ctx context.Context, monitorIDs []string) (map[string]time.Time, error)
 }
 
+// IncidentOpenedPayload carries the data needed to notify about an opened Incident.
+type IncidentOpenedPayload struct {
+	MonitorName string
+}
+
+// IncidentResolvedPayload carries the data needed to notify about a resolved Incident.
+type IncidentResolvedPayload struct {
+	MonitorName string
+	Duration    time.Duration
+}
+
 // EventKind names something relevant this context emits — overview.md
 // describes the responsibility ("emitir eventos relevantes ... disponibilizar
 // informações para alertas e comunicações"), but ownership of "Notification"

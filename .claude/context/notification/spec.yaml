@@ -1,0 +1,112 @@
+context: notification
+
+version: 1
+
+status: draft
+
+concepts:
+
+  Notification:
+    description: >
+      Representa a entrega de uma comunicação ao influenciador. Possui lifecycle próprio
+      (Pending → Delivered | Dead) independente do evento que a originou. Rastreia
+      tentativas de entrega e consolida o resultado final. É auditável — Notifications
+      com status Dead são retidas para diagnóstico.
+    responsibilities:
+      - Registrar a intenção de entrega e seu resultado
+      - Rastrear tentativas consecutivas de entrega
+      - Ser auditável em caso de falha permanente
+    invariants:
+      - Toda Notification nasce com status Pending e Attempts zero (RN-N001)
+      - Delivered e Dead são estados finais — não retrocedem (RN-N002)
+      - Attempts só cresce; nunca é decrementado (RN-N003)
+      - Máximo de 3 tentativas antes de transitar para Dead (RN-N004)
+      - DeliveredAt só é preenchido quando status é Delivered (RN-N005)
+
+  NotificationTemplate:
+    description: >
+      Lógica de transformação de tipo + payload em mensagem legível. Não é entidade
+      persistida — é regra de domínio. Templates são fixos por tipo de evento no MVP.
+    responsibilities:
+      - Produzir o texto da mensagem a partir do Type e do Payload
+
+  WhatsAppProvider:
+    description: >
+      Porta (interface) que abstrai a infraestrutura de entrega. O domínio conhece apenas
+      Send(recipient, message) — o provedor concreto (Twilio, Z-API, Meta API) é detalhe
+      de infraestrutura resolvido na implementação (PA-N01).
+    responsibilities:
+      - Entregar a mensagem no canal e retornar sucesso ou erro
+
+workflows:
+
+  EnqueueNotification:
+    input:
+      - evento recebido do contexto Observability (incident_opened | incident_resolved)
+      - WhatsAppNumber do perfil do influenciador
+    flow:
+      - Se WhatsAppNumber ausente, ignorar — não há Notification sem destinatário
+      - Criar Notification com status Pending e Attempts zero
+      - Persistir Notification
+    output:
+      - Notification persistida com status Pending
+
+  DeliverNotification:
+    input:
+      - execução periódica do Worker
+    flow:
+      - Worker busca Notifications com status Pending ou Failed com Attempts menor que 3
+      - Renderiza mensagem via NotificationTemplate
+      - Chama WhatsAppProvider.Send
+      - Sucesso → status Delivered, DeliveredAt preenchido
+      - Falha → Attempts incrementado, status Failed
+      - Se Attempts atingiu 3 → status Dead
+    output:
+      - Notification com status Delivered ou Dead
+
+rules:
+
+  - id: RN-N001
+    description: Toda Notification nasce com status Pending e Attempts zero.
+
+  - id: RN-N002
+    description: Delivered e Dead são estados finais — não retrocedem.
+
+  - id: RN-N003
+    description: Attempts só cresce; nunca é decrementado.
+
+  - id: RN-N004
+    description: Máximo de 3 tentativas. Ao atingir o limite, status transita para Dead.
+
+  - id: RN-N005
+    description: DeliveredAt é preenchido somente quando status transita para Delivered.
+
+  - id: RN-N006
+    description: >
+      Sem WhatsAppNumber disponível no perfil, nenhuma Notification é criada —
+      o evento é silenciosamente ignorado.
+
+  - id: RN-N007
+    description: Worker não processa Notifications com status Delivered ou Dead.
+
+open_questions:
+
+  - id: PA-N01
+    description: >
+      Provedor WhatsApp concreto (Twilio, Z-API, Meta API) — decisão de infraestrutura,
+      não bloqueia modelagem nem implementação do domínio.
+
+  - id: PA-N02
+    description: >
+      Ownership de Profile (onde vive WhatsAppNumber). No MVP tratado como dependência
+      externa — o use case recebe o número como parâmetro de entrada.
+
+backlog:
+
+  - PA-N03: Múltiplos destinatários por conta.
+  - PA-N04: Preferências de notificação por canal e evento.
+  - PA-N05: Silenciar notificações por período.
+  - PA-N06: Múltiplos canais (e-mail, Telegram, Slack, webhook).
+  - PA-N07: Escalação — renotificar se problema não resolvido após N minutos.
+  - PA-N08: Templates configuráveis por cliente.
+  - PA-N09: Notificação de Daily Summary.

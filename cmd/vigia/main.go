@@ -14,10 +14,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 
+	notifapp "github.com/vigia/vigia-v1/internal/notification/application"
+	notifobservability "github.com/vigia/vigia-v1/internal/notification/infrastructure/observability"
+	notifpostgres "github.com/vigia/vigia-v1/internal/notification/infrastructure/persistence/postgres"
+	"github.com/vigia/vigia-v1/internal/notification/infrastructure/provider/uazapi"
 	"github.com/vigia/vigia-v1/internal/observability/analyzer"
 	"github.com/vigia/vigia-v1/internal/observability/application"
 	"github.com/vigia/vigia-v1/internal/observability/collector"
-	"github.com/vigia/vigia-v1/internal/observability/infrastructure/notification"
 	"github.com/vigia/vigia-v1/internal/observability/infrastructure/persistence/postgres"
 	"github.com/vigia/vigia-v1/internal/observability/infrastructure/scheduler"
 	httpapi "github.com/vigia/vigia-v1/internal/observability/interfaces/http"
@@ -47,7 +50,18 @@ func main() {
 	sysClock := clock.System()
 	ids := id.Random()
 
-	publisher := notification.NewStubPublisher(nil)
+	// Notification context
+	notifRepo := notifpostgres.NewNotificationRepository(pool)
+	whatsappProvider := uazapi.NewWhatsAppProvider(
+		envOrDefault("UAZAPI_BASE_URL", ""),
+		envOrDefault("UAZAPI_TOKEN", ""),
+		nil,
+	)
+	enqueueNotification := notifapp.NewEnqueueNotification(notifRepo, ids, sysClock)
+	deliverNotifications := notifapp.NewDeliverNotifications(notifRepo, whatsappProvider, sysClock)
+	publisher := notifobservability.NewPublisher(enqueueNotification, envOrDefault("WHATSAPP_RECIPIENT", ""))
+
+	// Observability context
 	resolveIncident := application.NewResolveIncident(incidents, publisher, sysClock)
 	checkMonitor := application.NewCheckMonitor(
 		monitors, incidents, samples,
@@ -68,6 +82,7 @@ func main() {
 	sched := scheduler.NewTickerScheduler(monitors, checkMonitor, 30*time.Second, sysClock, nil)
 	go sched.Run(ctx)
 	go runDailySummaryLoop(ctx, buildDailySummary)
+	go runDeliveryLoop(ctx, deliverNotifications)
 
 	handlers := httpapi.NewHandlers(createMonitor, pauseMonitor, resumeMonitor, disableMonitor, queryHistory, queryMonitors, queryIncidents, queryAggregateHistory)
 	addr := envOrDefault("HTTP_ADDR", ":8080")
@@ -90,9 +105,6 @@ func main() {
 	}
 }
 
-// runDailySummaryLoop fires BuildDailySummary roughly once a day — the
-// "execução diária agendada" the workflow describes. Exact wall-clock timing
-// (e.g. midnight) is an infra detail left for whenever it actually matters.
 func runDailySummaryLoop(ctx context.Context, uc *application.BuildDailySummary) {
 	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()
@@ -104,6 +116,22 @@ func runDailySummaryLoop(ctx context.Context, uc *application.BuildDailySummary)
 		case <-ticker.C:
 			if _, err := uc.Execute(ctx); err != nil {
 				log.Printf("vigia: daily summary failed: %v", err)
+			}
+		}
+	}
+}
+
+func runDeliveryLoop(ctx context.Context, uc *notifapp.DeliverNotifications) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := uc.Execute(ctx); err != nil {
+				log.Printf("vigia: notification delivery failed: %v", err)
 			}
 		}
 	}

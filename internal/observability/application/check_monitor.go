@@ -108,9 +108,10 @@ func (uc *CheckMonitor) Execute(ctx context.Context, monitorID string) error {
 			MonitorID:  m.ID,
 			IncidentID: inc.ID,
 			OccurredAt: now,
+			Payload:    IncidentOpenedPayload{MonitorName: m.Name},
 		})
 	case analyzer.DecisionResolveIncident:
-		return uc.resolveIncident.Execute(ctx, m.ID)
+		return uc.resolveIncident.Execute(ctx, m.ID, m.Name)
 	default:
 		return nil
 	}

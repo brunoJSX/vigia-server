@@ -20,7 +20,7 @@ func NewResolveIncident(incidents IncidentRepository, notifications Notification
 	return &ResolveIncident{incidents: incidents, notifications: notifications, clock: c}
 }
 
-func (uc *ResolveIncident) Execute(ctx context.Context, monitorID string) error {
+func (uc *ResolveIncident) Execute(ctx context.Context, monitorID, monitorName string) error {
 	open, err := uc.incidents.FindOpenByMonitorID(ctx, monitorID)
 	if err != nil {
 		return err
@@ -41,5 +41,6 @@ func (uc *ResolveIncident) Execute(ctx context.Context, monitorID string) error 
 		MonitorID:  open.MonitorID,
 		IncidentID: open.ID,
 		OccurredAt: now,
+		Payload:    IncidentResolvedPayload{MonitorName: monitorName, Duration: open.Duration()},
 	})
 }
